@@ -16,9 +16,7 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: "ap-southeast-1"  # Set your preferred AWS region
       IMAGE_NAME: "hasanroo10/nginx-hsn-test"
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}  # The SSH private key for EC2 access
-      EC2_USER: "admin"  # Modify this based on your EC2 AMI user (e.g., 'ec2-user' for Amazon Linux)
-    
+
     steps:
     # Checkout the repository
     - name: Checkout Code
@@ -37,42 +35,49 @@ jobs:
       run: docker push $IMAGE_NAME
 
     # Get EC2 Instance IDs of running instances using the Name tag and state filter
-    - name: Get EC2 Instance IPs (only running instances)
+    - name: Get EC2 Instance IDs (only running instances)
       run: |
-        INSTANCE_IPS=$(aws ec2 describe-instances \
+        INSTANCE_IDS=$(aws ec2 describe-instances \
           --filters "Name=tag:Name,Values=autoscaling-instance" \
                    "Name=instance-state-name,Values=running" \
-          --query "Reservations[].Instances[].PublicIpAddress" \
+          --query "Reservations[].Instances[].InstanceId" \
           --output text)
-        echo "INSTANCE_IPS=$INSTANCE_IPS" >> $GITHUB_ENV
+        echo "INSTANCE_IDS=$INSTANCE_IDS" >> $GITHUB_ENV  # Save to environment variable
 
-    # Debugging: Check the EC2 Instance IPs
-    - name: Check EC2 Instance IPs
+    # Debugging: Check the EC2 Instance IDs
+    - name: Debug INSTANCE_IDS
       run: |
-        echo "INSTANCE_IPS: $INSTANCE_IPS"
-        if [ -z "$INSTANCE_IPS" ]; then
+        echo "INSTANCE_IDS: $INSTANCE_IDS"
+        if [ -z "$INSTANCE_IDS" ]; then
           echo "No running EC2 instances found with the tag 'autoscaling-instance'."
           exit 1
         fi
 
-    # Deploy Docker Image to EC2 instances using SSH
-    - name: Deploy Docker Image to EC2 using SSH
+    # Check if instance is registered with SSM
+    - name: Check if EC2 instance is registered with SSM
       run: |
-        for INSTANCE_IP in $INSTANCE_IPS; do
-          echo "Deploying to instance: $INSTANCE_IP"
-          # Add the SSH private key to the ssh-agent
-          echo "$SSH_PRIVATE_KEY" | ssh-add - > /dev/null
-          # Add the instance IP to the known hosts to avoid SSH warnings
-          ssh-keyscan -H $INSTANCE_IP >> ~/.ssh/known_hosts
-          
-          # SSH into the EC2 instance and run the Docker commands
-          ssh -o StrictHostKeyChecking=no $EC2_USER@$INSTANCE_IP << 'EOF'
-            sudo apt update
-            sudo apt install -y docker.io
-            echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-            docker ps -q --filter "ancestor=$IMAGE_NAME" | grep -q . && docker stop $(docker ps -q --filter "ancestor=$IMAGE_NAME") && docker rm $(docker ps -q --filter "ancestor=$IMAGE_NAME")
-            docker pull $IMAGE_NAME
-            docker run -d -p 80:80 $IMAGE_NAME
-            docker ps -a
-          EOF
+        for INSTANCE_ID in $INSTANCE_IDS; do
+          echo "Checking if instance $INSTANCE_ID is registered with SSM"
+          aws ssm describe-instance-information --filters "Key=InstanceIds,Values=$INSTANCE_ID" --region $AWS_REGION || echo "Instance $INSTANCE_ID not registered with SSM."
+        done
+
+    # Deploy Docker Image to EC2 instances using SSM
+    - name: Deploy Docker Image to EC2 using SSM
+      run: |
+        for INSTANCE_ID in $INSTANCE_IDS; do
+          echo "Deploying to instance: $INSTANCE_ID"
+          aws ssm send-command \
+            --instance-ids $INSTANCE_ID \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploying Docker container" \
+            --parameters 'commands=[
+              "sudo apt update",
+              "sudo apt install -y docker.io",
+              "echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin",
+              "docker ps -q --filter \"ancestor=$IMAGE_NAME\" | grep -q . && docker stop $(docker ps -q --filter \"ancestor=$IMAGE_NAME\") && docker rm $(docker ps -q --filter \"ancestor=$IMAGE_NAME\")",
+              "docker pull $IMAGE_NAME",
+              "docker run -d -p 80:80 $IMAGE_NAME",
+              "docker ps -a"
+            ]' \
+            --region $AWS_REGION
         done
