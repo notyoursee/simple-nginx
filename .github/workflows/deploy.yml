@@ -34,28 +34,31 @@ jobs:
     - name: Push Docker Image to Docker Hub
       run: docker push $IMAGE_NAME
 
-    # Get EC2 Instance IDs using the Name tag
+    # Get EC2 Instance IDs
     - name: Get EC2 Instance IDs
       run: |
-        INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=autoscaling-instance" --query "Reservations[].Instances[].InstanceId" --output text)
+        INSTANCE_IDS=$(aws ec2 describe-instances \
+          --filters "Name=tag:Name,Values=autoscaling-instance" "Name=instance-state-name,Values=running" \
+          --query "Reservations[].Instances[].InstanceId" \
+          --output text)
+        
         echo "INSTANCE_IDS=$INSTANCE_IDS" >> $GITHUB_ENV
 
-    
-    - name: Check EC2 Instance IDs
+    # Debug EC2 Instance IDs
+    - name: Debug EC2 Instance IDs
       run: |
-        echo "INSTANCE_IDS: $INSTANCE_IDS"
-
-
-    # Deploy Docker Image to EC2 instances
-    - name: Deploy Docker Image to EC2 using SSM
-      run: |
+        echo "Retrieved Instance IDs: $INSTANCE_IDS"
         if [ -z "$INSTANCE_IDS" ]; then
-          echo "No EC2 instances found to deploy."
+          echo "No running EC2 instances found with the tag 'autoscaling-instance'."
           exit 1
         fi
-    
+
+    # Deploy Docker Image to EC2 using SSM
+    - name: Deploy Docker Image to EC2 using SSM
+      run: |
         for INSTANCE_ID in $INSTANCE_IDS; do
           echo "Deploying to instance: $INSTANCE_ID"
+          
           aws ssm send-command \
             --instance-ids $INSTANCE_ID \
             --document-name "AWS-RunShellScript" \
