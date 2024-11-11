@@ -71,6 +71,15 @@ jobs:
             --instance-ids $INSTANCE_ID \
             --document-name "AWS-RunShellScript" \
             --comment "Deploying Docker container" \
-            --parameters 'commands=["sudo apt update","sudo apt install -y docker.io","docker ps -q --filter \"ancestor=$IMAGE_NAME\" | grep -q . && docker stop $(docker ps -q --filter \"ancestor=$IMAGE_NAME\") && docker rm $(docker ps -q --filter \"ancestor=$IMAGE_NAME\")","docker pull $IMAGE_NAME","docker run -d -p 80:80 $IMAGE_NAME"]' \
+            --parameters 'commands=[
+              "sudo apt update",
+              "sudo apt install -y docker.io",
+              "echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin",
+              "docker ps -q --filter \"ancestor=$IMAGE_NAME\" | grep -q . && docker stop $(docker ps -q --filter \"ancestor=$IMAGE_NAME\") && docker rm $(docker ps -q --filter \"ancestor=$IMAGE_NAME\")",
+              "docker pull $IMAGE_NAME",
+              "docker run -d -p 80:80 $IMAGE_NAME"
+            ]' \
             --region $AWS_REGION
         done
+
+
