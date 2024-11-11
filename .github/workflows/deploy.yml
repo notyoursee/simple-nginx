@@ -17,7 +17,7 @@ jobs:
       AWS_REGION: "ap-southeast-1"  # Set your preferred AWS region
       IMAGE_NAME: "hasanroo10/nginx-hsn-test"
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}  # The SSH private key for EC2 access
-      EC2_USER: "ubuntu"  # Modify this based on your EC2 AMI user (e.g., 'ec2-user' for Amazon Linux)
+      EC2_USER: "admin"  # Modify this based on your EC2 AMI user (e.g., 'ec2-user' for Amazon Linux)
     
     steps:
     # Checkout the repository
