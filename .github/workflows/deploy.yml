@@ -42,10 +42,10 @@ jobs:
                    "Name=instance-state-name,Values=running" \
           --query "Reservations[].Instances[].InstanceId" \
           --output text)
-        echo "INSTANCE_IDS=$INSTANCE_IDS" >> $GITHUB_ENV
-    
+        echo "INSTANCE_IDS=$INSTANCE_IDS" >> $GITHUB_ENV  # Save to environment variable
+
     # Debugging: Check the EC2 Instance IDs
-    - name: Check EC2 Instance IDs
+    - name: Debug INSTANCE_IDS
       run: |
         echo "INSTANCE_IDS: $INSTANCE_IDS"
         if [ -z "$INSTANCE_IDS" ]; then
@@ -61,7 +61,6 @@ jobs:
           aws ssm describe-instance-information --filters "Key=InstanceIds,Values=$INSTANCE_ID" --region $AWS_REGION || echo "Instance $INSTANCE_ID not registered with SSM."
         done
 
-
     # Deploy Docker Image to EC2 instances using SSM
     - name: Deploy Docker Image to EC2 using SSM
       run: |
@@ -71,18 +70,14 @@ jobs:
             --instance-ids $INSTANCE_ID \
             --document-name "AWS-RunShellScript" \
             --comment "Deploying Docker container" \
-            --parameters "commands=[
-              \"sudo apt update\",
-              \"sudo apt install -y docker.io\",
-              \"echo \$DOCKER_PASSWORD | docker login -u \$DOCKER_USERNAME --password-stdin\",
-              \"docker ps -q --filter \\\"ancestor=\$IMAGE_NAME\\\" | grep -q . && docker stop \$(docker ps -q --filter \\\"ancestor=\$IMAGE_NAME\\\") && docker rm \$(docker ps -q --filter \\\"ancestor=\$IMAGE_NAME\\\")\",
-              \"docker pull \$IMAGE_NAME\",
-              \"docker run -d -p 80:80 \$IMAGE_NAME\",
-              \"docker ps -a\"
-            ]" \
+            --parameters 'commands=[
+              "sudo apt update",
+              "sudo apt install -y docker.io",
+              "echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin",
+              "docker ps -q --filter \"ancestor=$IMAGE_NAME\" | grep -q . && docker stop $(docker ps -q --filter \"ancestor=$IMAGE_NAME\") && docker rm $(docker ps -q --filter \"ancestor=$IMAGE_NAME\")",
+              "docker pull $IMAGE_NAME",
+              "docker run -d -p 80:80 $IMAGE_NAME",
+              "docker ps -a"
+            ]' \
             --region $AWS_REGION
         done
-
-
-
-
