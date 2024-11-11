@@ -53,6 +53,15 @@ jobs:
           exit 1
         fi
 
+    # Check if instance is registered with SSM
+    - name: Check if EC2 instance is registered with SSM
+      run: |
+        for INSTANCE_ID in $INSTANCE_IDS; do
+          echo "Checking if instance $INSTANCE_ID is registered with SSM"
+          aws ssm describe-instance-information --filters "Key=InstanceIds,Values=$INSTANCE_ID" --region $AWS_REGION || echo "Instance $INSTANCE_ID not registered with SSM."
+        done
+
+
     # Deploy Docker Image to EC2 instances using SSM
     - name: Deploy Docker Image to EC2 using SSM
       run: |
