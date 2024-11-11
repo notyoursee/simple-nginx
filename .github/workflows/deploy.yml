@@ -40,9 +40,20 @@ jobs:
         INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=autoscaling-instance" --query "Reservations[].Instances[].InstanceId" --output text)
         echo "INSTANCE_IDS=$INSTANCE_IDS" >> $GITHUB_ENV
 
+    
+    - name: Check EC2 Instance IDs
+      run: |
+        echo "INSTANCE_IDS: $INSTANCE_IDS"
+
+
     # Deploy Docker Image to EC2 instances
     - name: Deploy Docker Image to EC2 using SSM
       run: |
+        if [ -z "$INSTANCE_IDS" ]; then
+          echo "No EC2 instances found to deploy."
+          exit 1
+        fi
+    
         for INSTANCE_ID in $INSTANCE_IDS; do
           echo "Deploying to instance: $INSTANCE_ID"
           aws ssm send-command \
