@@ -77,9 +77,11 @@ jobs:
               "echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin",
               "docker ps -q --filter \"ancestor=$IMAGE_NAME\" | grep -q . && docker stop $(docker ps -q --filter \"ancestor=$IMAGE_NAME\") && docker rm $(docker ps -q --filter \"ancestor=$IMAGE_NAME\")",
               "docker pull $IMAGE_NAME",
-              "docker run -d -p 80:80 $IMAGE_NAME"
+              "docker run -d -p 80:80 $IMAGE_NAME",
+              "docker ps -a"  # Add this to see if the container is running
             ]' \
             --region $AWS_REGION
         done
+
 
 
