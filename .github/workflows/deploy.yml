@@ -1,4 +1,3 @@
-# .github/workflows/deploy.yml
 name: Deploy Nginx Docker Image to EC2
 
 on:
@@ -35,24 +34,21 @@ jobs:
     - name: Push Docker Image to Docker Hub
       run: docker push $IMAGE_NAME
 
-    # SSH into the EC2 instance and deploy the Docker container
-    - name: Deploy Docker Image to EC2
-      uses: appleboy/ssh-action@v0.1.3
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ubuntu  # Adjust based on your EC2 instance setup
-        key: ${{ secrets.EC2_SSH_KEY }}
-        port: 22
-        script: |
-          # Update the instance and install Docker if not installed
-          sudo apt update
-          sudo apt install -y docker.io
-          
-          # Stop and remove any existing containers running on port 80
-          docker ps -q --filter "ancestor=$IMAGE_NAME" | grep -q . && docker stop $(docker ps -q --filter "ancestor=$IMAGE_NAME") && docker rm $(docker ps -q --filter "ancestor=$IMAGE_NAME")
-          
-          # Pull the new image from Docker Hub
-          docker pull $IMAGE_NAME
-          
-          # Run the Docker container, mapping to port 80
-          docker run -d -p 80:80 $IMAGE_NAME
+    # Get EC2 Instance IDs using the Name tag
+    - name: Get EC2 Instance IDs
+      run: |
+        INSTANCE_IDS=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=autoscaling-instance" --query "Reservations[].Instances[].InstanceId" --output text)
+        echo "INSTANCE_IDS=$INSTANCE_IDS" >> $GITHUB_ENV
+
+    # Deploy Docker Image to EC2 instances
+    - name: Deploy Docker Image to EC2 using SSM
+      run: |
+        for INSTANCE_ID in $INSTANCE_IDS; do
+          echo "Deploying to instance: $INSTANCE_ID"
+          aws ssm send-command \
+            --instance-ids $INSTANCE_ID \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploying Docker container" \
+            --parameters 'commands=["sudo apt update","sudo apt install -y docker.io","docker ps -q --filter \"ancestor=$IMAGE_NAME\" | grep -q . && docker stop $(docker ps -q --filter \"ancestor=$IMAGE_NAME\") && docker rm $(docker ps -q --filter \"ancestor=$IMAGE_NAME\")","docker pull $IMAGE_NAME","docker run -d -p 80:80 $IMAGE_NAME"]' \
+            --region $AWS_REGION
+        done
